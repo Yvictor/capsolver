@@ -1,0 +1,21 @@
+[project]
+name = "capsolver-api"
+version = "0.1.0"
+description = "capsolver fastapi api"
+readme = "README.md"
+authors = [
+    { name = "yvictor", email = "yvictor3141@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "capsolver>=1.0.7",
+    "fastapi[standard]>=0.115.11",
+]
+
+[project.scripts]
+capsolver-api = "capsolver_api:main"
+app = "capsolver_api.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
