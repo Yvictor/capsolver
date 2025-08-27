@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.12.15",
     "camoufox>=0.4.11",
     "capsolver>=1.0.7",
     "fastapi[standard]>=0.115.11",
