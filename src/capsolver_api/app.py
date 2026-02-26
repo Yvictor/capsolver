@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import capsolver
@@ -8,15 +9,28 @@ from .utils import get_turnstile_token
 from .solver import fetch_turnstile_token, init_browser_pool, close_browser_pool
 
 app = FastAPI()
-app.add_event_handler("startup", init_browser_pool)
+
+
+async def _startup_browser_pool():
+    """Start browser pool in background so it doesn't block the server startup."""
+    asyncio.create_task(init_browser_pool())
+
+app.add_event_handler("startup", _startup_browser_pool)
 app.add_event_handler("shutdown", close_browser_pool)
 
 capsolver.api_key = os.getenv("CAPSOLVER_API_KEY")
 TOKENS_QUEUE = []
 
+
 @app.get("/")
 def read_root():
     return {"message": "Hello World"}
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint. Returns 200 if the service is alive and responsive."""
+    return {"status": "ok"}
 
 
 @app.get("/ip")
