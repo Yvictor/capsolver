@@ -1,22 +1,33 @@
 import asyncio
 import os
+import logging
 
 import capsolver
 import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from .utils import get_turnstile_token
-from .solver import fetch_turnstile_token, init_browser_pool, close_browser_pool
+from .solver import fetch_turnstile_token, init_browser_pool, close_browser_pool, browser_pool_status
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
+_pool_task = None
 
 
 async def _startup_browser_pool():
     """Start browser pool in background so it doesn't block the server startup."""
-    asyncio.create_task(init_browser_pool())
+    global _pool_task
+    _pool_task = asyncio.create_task(init_browser_pool())
+
+
+async def _shutdown_browser_pool():
+    if _pool_task is not None:
+        _pool_task.cancel()
+        await asyncio.gather(_pool_task, return_exceptions=True)
+    await close_browser_pool()
 
 app.add_event_handler("startup", _startup_browser_pool)
-app.add_event_handler("shutdown", close_browser_pool)
+app.add_event_handler("shutdown", _shutdown_browser_pool)
 
 capsolver.api_key = os.getenv("CAPSOLVER_API_KEY")
 TOKENS_QUEUE = []
@@ -30,7 +41,10 @@ def read_root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint. Returns 200 if the service is alive and responsive."""
-    return {"status": "ok"}
+    pool = browser_pool_status()
+    if not pool["ready"]:
+        raise HTTPException(status_code=503, detail=pool)
+    return {"status": "ok", "pool": pool}
 
 
 @app.get("/ip")
@@ -75,7 +89,11 @@ async def turnstile_realpage_solver(url: str, website_key: str):
     try:
         token = await fetch_turnstile_token(url, website_key)
         return {"token": token}
+    except TimeoutError:
+        logger.exception("Realpage solver timed out")
+        raise HTTPException(status_code=504, detail="Browser wait or solve timed out")
     except Exception as e:
+        logger.exception("Realpage solver failed")
         raise HTTPException(status_code=500, detail=f"Error: {e}")
 
 @app.get("/turnstile/collect")
@@ -96,6 +114,6 @@ def main():
         "capsolver_api.app:app",
         host=os.getenv("API_HOST", "0.0.0.0"),
         port=int(os.getenv("API_PORT", 9987)),
-        reload=bool(os.getenv("API_RELOAD", True)),
+        reload=os.getenv("API_RELOAD", "false").lower() in {"1", "true", "yes"},
         # workers=os.getenv("API_WORKERS", 4),
     )
